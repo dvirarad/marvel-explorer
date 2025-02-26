@@ -1,0 +1,25 @@
+# .editorconfig - Place this in the root of your project
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 2
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{js,jsx,ts,tsx,json}]
+indent_size = 2
+
+[*.{css,scss,less}]
+indent_size = 2
+
+[*.{html,xml}]
+indent_size = 2
+
+[*.{yml,yaml}]
+indent_size = 2

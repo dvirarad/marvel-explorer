@@ -1,0 +1,12 @@
+# .prettierignore - Use this same file for both backend and frontend
+dist
+node_modules
+coverage
+build
+.git
+.github
+*.md
+*.yml
+*.yaml
+.env
+.env.*
