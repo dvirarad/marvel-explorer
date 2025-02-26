@@ -1,30 +1,16 @@
-// src/movies/movies.controller.ts
-import {
-  Controller,
-  Get,
-  Param,
-  Logger,
-  HttpStatus,
-  Query,
-  NotFoundException,
-} from '@nestjs/common';
-import { MoviesService } from './movies.service';
+import { Controller, Get, Param, Query, HttpStatus, NotFoundException } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+
+import { PaginationQueryDto, PaginationResponseDto } from '../common/dto/pagination.dto';
+import { MovieDto } from '../models/responses-dto';
+
+import { MoviesService } from './movies.service';
 import { IdParamDto } from './dto/id-param.dto';
 import { SearchQueryDto } from './dto/query-param.dto';
-import {
-  MovieDto,
-  MoviesPerActorResponseDto,
-  ActorsWithMultipleCharactersResponseDto,
-  CharactersWithMultipleActorsResponseDto,
-} from '../models/responses-dto';
 
 @ApiTags('marvel')
 @Controller()
 export class MoviesController {
-  private readonly logger = new Logger(MoviesController.name);
-  private readonly RESOURCE_NOT_FOUND = 'Resource not found';
-
   constructor(private readonly moviesService: MoviesService) {}
 
   @Get('movies')
@@ -41,8 +27,11 @@ export class MoviesController {
     type: [MovieDto],
   })
   @ApiResponse({ status: HttpStatus.INTERNAL_SERVER_ERROR, description: 'Internal server error' })
-  async findAll(@Query() query: SearchQueryDto): Promise<MovieDto[]> {
-    return this.moviesService.findAll(query?.search);
+  async findAll(
+    @Query() query: SearchQueryDto,
+    @Query() paginationQuery: PaginationQueryDto,
+  ): Promise<PaginationResponseDto<MovieDto>> {
+    return this.moviesService.findAll(query?.search, paginationQuery);
   }
 
   @Get('movies/:id')
@@ -54,7 +43,7 @@ export class MoviesController {
   async findOne(@Param() params: IdParamDto): Promise<MovieDto> {
     const movie = await this.moviesService.findOne(params.id);
     if (!movie) {
-      throw new NotFoundException(this.RESOURCE_NOT_FOUND);
+      throw new NotFoundException('Movie not found');
     }
     return movie;
   }
@@ -64,11 +53,10 @@ export class MoviesController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'List of Marvel movies per actor retrieved successfully',
-    type: MoviesPerActorResponseDto,
   })
   @ApiResponse({ status: HttpStatus.INTERNAL_SERVER_ERROR, description: 'Internal server error' })
-  async getMoviesPerActor(): Promise<MoviesPerActorResponseDto> {
-    return this.moviesService.getMoviesPerActor();
+  async getMoviesPerActor(@Query() paginationQuery: PaginationQueryDto) {
+    return this.moviesService.getMoviesPerActor(paginationQuery);
   }
 
   @Get('actorsWithMultipleCharacters')
@@ -76,11 +64,10 @@ export class MoviesController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Actors with multiple Marvel characters retrieved successfully',
-    type: ActorsWithMultipleCharactersResponseDto,
   })
   @ApiResponse({ status: HttpStatus.INTERNAL_SERVER_ERROR, description: 'Internal server error' })
-  async getActorsWithMultipleCharacters(): Promise<ActorsWithMultipleCharactersResponseDto> {
-    return this.moviesService.getActorsWithMultipleCharacters();
+  async getActorsWithMultipleCharacters(@Query() paginationQuery: PaginationQueryDto) {
+    return this.moviesService.getActorsWithMultipleCharacters(paginationQuery);
   }
 
   @Get('charactersWithMultipleActors')
@@ -88,10 +75,9 @@ export class MoviesController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Characters with multiple actors retrieved successfully',
-    type: CharactersWithMultipleActorsResponseDto,
   })
   @ApiResponse({ status: HttpStatus.INTERNAL_SERVER_ERROR, description: 'Internal server error' })
-  async getCharactersWithMultipleActors(): Promise<CharactersWithMultipleActorsResponseDto> {
-    return this.moviesService.getCharactersWithMultipleActors();
+  async getCharactersWithMultipleActors(@Query() paginationQuery: PaginationQueryDto) {
+    return this.moviesService.getCharactersWithMultipleActors(paginationQuery);
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+
 import { Movie, MovieDocument } from '../schemas/movie.schema';
 import { Actor, ActorDocument } from '../schemas/actor.schema';
 import { Character, CharacterDocument } from '../schemas/character.schema';
@@ -8,14 +9,7 @@ import {
   MovieActorCharacter,
   MovieActorCharacterDocument,
 } from '../schemas/movie-actor-character.schema';
-import {
-  MovieDto,
-  MoviesPerActorResponseDto,
-  ActorsWithMultipleCharactersResponseDto,
-  CharactersWithMultipleActorsResponseDto,
-  CharacterRoleDto,
-  ActorRoleDto,
-} from '../models/responses-dto';
+import { PaginationQueryDto, PaginationResponseDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class MoviesService {
@@ -29,14 +23,40 @@ export class MoviesService {
   ) {}
 
   /**
-   * Get all movies
+   * Get all movies with pagination
    * @param search Optional search term to filter movies by title
-   * @returns Array of movies matching the criteria
+   * @param pagination Pagination options
+   * @returns Paginated list of movies
    */
-  async findAll(search?: string): Promise<MovieDto[]> {
+  async findAll(
+    search?: string,
+    pagination?: PaginationQueryDto,
+  ): Promise<PaginationResponseDto<Movie>> {
+    const { page = 0, limit = 10 } = pagination || {};
+
     const query = search ? { title: { $regex: search, $options: 'i' } } : {};
 
-    return this.movieModel.find<MovieDto>(query).sort({ releaseDate: 1 }).exec();
+    const [items, total] = await Promise.all([
+      this.movieModel
+        .find(query)
+        .sort({ releaseDate: 1 })
+        .skip(page * limit)
+        .limit(limit)
+        .exec(),
+      this.movieModel.countDocuments(query),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages,
+      hasPrevPage: page > 0,
+      hasNextPage: page < totalPages - 1,
+    };
   }
 
   /**
@@ -44,124 +64,234 @@ export class MoviesService {
    * @param id The movie ID
    * @returns The found movie or null
    */
-  async findOne(id: string): Promise<MovieDto | null> {
-    return this.movieModel.findById<MovieDto>(id).exec();
+  async findOne(id: string): Promise<Movie | null> {
+    return this.movieModel.findById(id).exec();
   }
 
   /**
-   * Get movies per actor
-   * @returns List of Marvel movies each actor has appeared in
+   * Get movies per actor with pagination
+   * @param pagination Pagination options
+   * @returns Paginated list of movies per actor
    */
-  async getMoviesPerActor(): Promise<MoviesPerActorResponseDto> {
+  async getMoviesPerActor(pagination?: PaginationQueryDto) {
     this.logger.log('Getting movies per actor');
+    const { page = 0, limit = 10 } = pagination || {};
 
-    const relations = await this.macModel.find().populate('movie').populate('actor').exec();
+    // Aggregate to get movies per actor
+    const allActorMoviesRelations = await this.macModel
+      .find()
+      .populate('movie')
+      .populate('actor')
+      .exec();
 
-    const result: MoviesPerActorResponseDto = {};
+    // Build the full dataset for all actors
+    const actorMoviesMap = {};
 
-    for (const relation of relations) {
+    for (const relation of allActorMoviesRelations) {
       const actorName = relation.actor['name'];
       const movieTitle = relation.movie['title'];
 
-      if (!result[actorName]) {
-        result[actorName] = [];
+      if (!actorMoviesMap[actorName]) {
+        actorMoviesMap[actorName] = [];
       }
 
-      if (!result[actorName].includes(movieTitle)) {
-        result[actorName].push(movieTitle);
+      if (!actorMoviesMap[actorName].includes(movieTitle)) {
+        actorMoviesMap[actorName].push(movieTitle);
       }
     }
 
-    return result;
+    // Get sorted actor names for consistent ordering
+    const actorNames = Object.keys(actorMoviesMap).sort();
+
+    // Apply pagination
+    const totalActors = actorNames.length;
+    const paginatedActorNames = actorNames.slice(page * limit, page * limit + limit);
+
+    // Build the paginated response
+    const paginatedResult = {};
+    paginatedActorNames.forEach(actor => {
+      paginatedResult[actor] = actorMoviesMap[actor];
+    });
+
+    // Return with pagination metadata
+    const totalPages = Math.ceil(totalActors / limit);
+
+    return {
+      data: paginatedResult,
+      pagination: {
+        total: totalActors,
+        page,
+        limit,
+        totalPages,
+        hasPrevPage: page > 0,
+        hasNextPage: page < totalPages - 1,
+      },
+    };
   }
 
   /**
-   * Get actors with multiple characters
-   * @returns Actors who have played more than one Marvel character
+   * Get actors with multiple characters with pagination
+   * @param pagination Pagination options
+   * @returns Paginated list of actors with multiple characters
    */
-  async getActorsWithMultipleCharacters(): Promise<ActorsWithMultipleCharactersResponseDto> {
+  async getActorsWithMultipleCharacters(pagination?: PaginationQueryDto) {
     this.logger.log('Getting actors with multiple characters');
+    const { page = 0, limit = 10 } = pagination || {};
 
-    const relations = await this.macModel.find().populate('movie').populate('actor').exec();
+    // Get all actor-character relationships
+    const relations = await this.macModel
+      .find()
+      .populate('movie')
+      .populate('actor')
+      .populate('character')
+      .exec();
 
-    const actorCharacters: Record<string, CharacterRoleDto[]> = {};
+    // Group by actor and collect unique characters
+    const actorCharactersMap: Record<string, Map<string, any>> = {};
 
-    // Group by actor and collect characters
     for (const relation of relations) {
       const actorName = relation.actor['name'];
       const movieTitle = relation.movie['title'];
-      const characterName = relation.characterName;
+      const characterName = relation.character
+        ? relation.character['name']
+        : relation.characterName;
 
-      if (!actorCharacters[actorName]) {
-        actorCharacters[actorName] = [];
+      if (!actorCharactersMap[actorName]) {
+        actorCharactersMap[actorName] = new Map();
       }
 
-      // Check if this character is already recorded for this actor
-      const existingChar = actorCharacters[actorName].find(
-        char => char.characterName === characterName,
-      );
-
-      if (!existingChar) {
-        actorCharacters[actorName].push({
+      // Use a Map to track unique characters by name
+      if (!actorCharactersMap[actorName].has(characterName)) {
+        actorCharactersMap[actorName].set(characterName, {
           movieName: movieTitle,
           characterName: characterName,
         });
       }
     }
 
-    // Filter to only actors with multiple characters
-    const result: ActorsWithMultipleCharactersResponseDto = {};
-    for (const [actorName, characters] of Object.entries(actorCharacters)) {
-      if (characters.length > 1) {
-        result[actorName] = characters;
+    // Convert to the desired format and filter to actors with multiple characters
+    const actorsWithMultipleCharacters = {};
+
+    for (const [actorName, charactersMap] of Object.entries(actorCharactersMap)) {
+      if (charactersMap?.size > 1) {
+        actorsWithMultipleCharacters[actorName] = Array.from(charactersMap.values());
       }
     }
 
-    return result;
+    // Get sorted actor names for consistent ordering
+    const actorNames = Object.keys(actorsWithMultipleCharacters).sort();
+
+    // Apply pagination
+    const totalActors = actorNames.length;
+    const paginatedActorNames = actorNames.slice(page * limit, page * limit + limit);
+
+    // Build the paginated response
+    const paginatedResult = {};
+    paginatedActorNames.forEach(actor => {
+      paginatedResult[actor] = actorsWithMultipleCharacters[actor];
+    });
+
+    // Return with pagination metadata
+    const totalPages = Math.ceil(totalActors / limit);
+
+    return {
+      data: paginatedResult,
+      pagination: {
+        total: totalActors,
+        page,
+        limit,
+        totalPages,
+        hasPrevPage: page > 0,
+        hasNextPage: page < totalPages - 1,
+      },
+    };
   }
 
   /**
-   * Get characters with multiple actors
-   * @returns Characters that were played by more than one actor
+   * Get characters with multiple actors with pagination
+   * @param pagination Pagination options
+   * @returns Paginated list of characters with multiple actors
    */
-  async getCharactersWithMultipleActors(): Promise<CharactersWithMultipleActorsResponseDto> {
+  async getCharactersWithMultipleActors(pagination?: PaginationQueryDto) {
     this.logger.log('Getting characters with multiple actors');
+    const { page = 0, limit = 10 } = pagination || {};
 
-    const relations = await this.macModel.find().populate('movie').populate('actor').exec();
+    // Get all character-actor relationships
+    const relations = await this.macModel
+      .find()
+      .populate('movie')
+      .populate('actor')
+      .populate('character')
+      .exec();
 
-    const characterActors: Record<string, ActorRoleDto[]> = {};
+    // Group by character and collect unique actors
+    const characterActorsMap: Record<string, Map<string, any>> = {};
 
-    // Group by character and collect actors
     for (const relation of relations) {
       const actorName = relation.actor['name'];
       const movieTitle = relation.movie['title'];
-      const characterName = relation.characterName;
+      const characterName = relation.character
+        ? relation.character['name']
+        : relation.characterName;
 
-      if (!characterActors[characterName]) {
-        characterActors[characterName] = [];
+      if (!characterActorsMap[characterName]) {
+        characterActorsMap[characterName] = new Map();
       }
 
-      // Check if this actor is already recorded for this character
-      const existingActor = characterActors[characterName].find(
-        actor => actor.actorName === actorName,
-      );
-
-      if (!existingActor) {
-        characterActors[characterName].push({
+      // Use a Map to track unique actors by name
+      const actorKey = `${actorName}:${movieTitle}`;
+      if (!characterActorsMap[characterName].has(actorKey)) {
+        characterActorsMap[characterName].set(actorKey, {
           movieName: movieTitle,
           actorName: actorName,
         });
       }
     }
 
-    // Filter to only characters with multiple actors
-    const result: CharactersWithMultipleActorsResponseDto = {};
-    for (const [characterName, actors] of Object.entries(characterActors)) {
-      if (actors.length > 1) {
-        result[characterName] = actors;
+    // Convert to the desired format and filter to characters with multiple actors
+    const charactersWithMultipleActors = {};
+
+    for (const [characterName, actorsMap] of Object.entries(characterActorsMap)) {
+      // First, group actors by name to handle same actor in different movies
+      const actorsByName = {};
+      for (const actorInfo of actorsMap.values()) {
+        if (!actorsByName[actorInfo.actorName]) {
+          actorsByName[actorInfo.actorName] = true;
+        }
+      }
+
+      // If there's more than one actor (by name), include this character
+      if (Object.keys(actorsByName).length > 1) {
+        charactersWithMultipleActors[characterName] = Array.from(actorsMap.values());
       }
     }
 
-    return result;
+    // Get sorted character names for consistent ordering
+    const characterNames = Object.keys(charactersWithMultipleActors).sort();
+
+    // Apply pagination
+    const totalCharacters = characterNames.length;
+    const paginatedCharacterNames = characterNames.slice(page * limit, page * limit + limit);
+
+    // Build the paginated response
+    const paginatedResult = {};
+    paginatedCharacterNames.forEach(character => {
+      paginatedResult[character] = charactersWithMultipleActors[character];
+    });
+
+    // Return with pagination metadata
+    const totalPages = Math.ceil(totalCharacters / limit);
+
+    return {
+      data: paginatedResult,
+      pagination: {
+        total: totalCharacters,
+        page,
+        limit,
+        totalPages,
+        hasPrevPage: page > 0,
+        hasNextPage: page < totalPages - 1,
+      },
+    };
   }
 }

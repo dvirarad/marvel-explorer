@@ -11,7 +11,6 @@ import {
 } from '../schemas/movie-actor-character.schema';
 
 import { TmdbService } from './tmdb.service';
-import { TmdbCastMember } from './types/tmdb-api.types';
 
 @Injectable()
 export class DataPopulateService implements OnApplicationBootstrap {
