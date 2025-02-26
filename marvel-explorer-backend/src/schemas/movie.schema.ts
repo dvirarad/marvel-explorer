@@ -37,6 +37,13 @@ export class Movie {
   @ApiProperty({ example: '/78lPtwv72eTNqFW9COBYI0dWDJa.jpg', description: 'Poster image path' })
   @Prop()
   posterPath: string;
+
+  @ApiProperty({
+    example: 'https://image.tmdb.org/t/p/w500/78lPtwv72eTNqFW9COBYI0dWDJa.jpg',
+    description: 'Full poster image URL',
+  })
+  @Prop()
+  posterUrl: string;
 }
 
 export const MovieSchema = SchemaFactory.createForClass(Movie);

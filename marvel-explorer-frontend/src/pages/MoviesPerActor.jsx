@@ -1,4 +1,3 @@
-// src/pages/MoviesPerActor.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Typography,
@@ -9,16 +8,14 @@ import {
   Divider,
   CircularProgress,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  Autocomplete,
   Alert,
+  List,
   ListItem,
   ListItemText,
+  ListItemAvatar,
+  Avatar,
 } from '@mui/material';
-import { FixedSizeList as List } from 'react-window';
-import InfiniteScroll from 'react-infinite-scroll-component';
 import { useApi } from '../contexts/ApiContext';
 
 const MoviesPerActor = () => {
@@ -26,8 +23,8 @@ const MoviesPerActor = () => {
   const [moviesPerActor, setMoviesPerActor] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedActor, setSelectedActor] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedActor, setSelectedActor] = useState(null);
+  const [actorDetails, setActorDetails] = useState(null);
 
   // Pagination state
   const [page, setPage] = useState(0);
@@ -49,7 +46,7 @@ const MoviesPerActor = () => {
     try {
       setLoading(true);
 
-      const response = await apiService.getMoviesPerActor(page, 10); // Load 10 actors at a time
+      const response = await apiService.getMoviesPerActor(page, 20); // Load 20 actors at a time
 
       // Update total count and pagination info
       if (response.pagination) {
@@ -76,43 +73,96 @@ const MoviesPerActor = () => {
     }
   };
 
-  // Get sorted list of actors
+  // Handle actor selection
+  const handleActorChange = (event, newValue) => {
+    setSelectedActor(newValue);
+
+    // Update actor details when selected
+    if (newValue && moviesPerActor[newValue]) {
+      setActorDetails({
+        name: newValue,
+        profileUrl: moviesPerActor[newValue]?.actorImageUrl || `/api/placeholder/300/450?text=${encodeURIComponent(newValue)}`
+      });
+    } else {
+      setActorDetails(null);
+    }
+  };
+
+  // Get sorted list of actors for Autocomplete
   const actors = Object.keys(moviesPerActor).sort();
 
-  // Filter actors based on search query
-  const filteredActors = actors.filter(actor =>
-    actor.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Get movie list for selected actor
+  const getMoviesForSelectedActor = () => {
+    if (!selectedActor || !moviesPerActor[selectedActor]) return [];
 
-  // Handle actor selection
-  const handleActorChange = (event) => {
-    setSelectedActor(event.target.value);
+    // Handle both old and new response formats
+    const actorData = moviesPerActor[selectedActor];
+
+    // If it's the new format with movies array
+    if (actorData.movies) {
+      return actorData.movies;
+    }
+
+    // If it's the old format (just an array of movie titles)
+    if (Array.isArray(actorData)) {
+      return actorData;
+    }
+
+    return [];
   };
 
-  // Handle search query change
-  const handleSearchChange = (event) => {
-    setSearchQuery(event.target.value);
+  // Get movie image URL
+  const getMovieImageUrl = (movie) => {
+    // If movie is an object with imageUrl property
+    if (typeof movie === 'object' && movie.imageUrl) {
+      return movie.imageUrl;
+    }
+
+    // Otherwise use a placeholder
+    const title = typeof movie === 'object' ? movie.title : movie;
+    return `/api/placeholder/200/300?text=${encodeURIComponent(title)}`;
   };
 
-  // Render function for virtualized list
-  const renderMovieItem = ({ index, style }) => {
-    if (!selectedActor || !moviesPerActor[selectedActor]) return null;
-
-    const movie = moviesPerActor[selectedActor][index];
-
-    return (
-      <div style={style}>
-        <ListItem>
-          <ListItemText primary={movie} />
-        </ListItem>
-        {index < moviesPerActor[selectedActor].length - 1 && <Divider />}
-      </div>
-    );
+  // Get movie title
+  const getMovieTitle = (movie) => {
+    return typeof movie === 'object' ? movie.title : movie;
   };
+
+  // Get number of movies for selected actor
+  const getMovieCount = () => {
+    if (!selectedActor || !moviesPerActor[selectedActor]) return 0;
+
+    const actorData = moviesPerActor[selectedActor];
+
+    if (actorData.movies) {
+      return actorData.movies.length;
+    }
+
+    if (Array.isArray(actorData)) {
+      return actorData.length;
+    }
+
+    return 0;
+  };
+
+  const movies = getMoviesForSelectedActor();
 
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
+      <Typography variant="h4" component="h1" gutterBottom color="primary"
+                  sx={{
+                    position: 'relative',
+                    '&:after': {
+                      content: '""',
+                      position: 'absolute',
+                      bottom: '-8px',
+                      left: '0',
+                      width: '60px',
+                      height: '4px',
+                      bgcolor: 'primary.main',
+                      borderRadius: '2px'
+                    }
+                  }}>
         Movies Per Actor
       </Typography>
 
@@ -122,43 +172,36 @@ const MoviesPerActor = () => {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      <Grid container spacing={3} sx={{ mt: 2 }}>
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Select an Actor
               </Typography>
-              <TextField
-                fullWidth
-                label="Search Actors"
-                variant="outlined"
-                value={searchQuery}
-                onChange={handleSearchChange}
-                margin="normal"
-              />
-              <FormControl fullWidth margin="normal">
-                <InputLabel id="actor-select-label">Actor</InputLabel>
-                <Select
-                  labelId="actor-select-label"
-                  id="actor-select"
-                  value={selectedActor}
-                  label="Actor"
-                  onChange={handleActorChange}
-                >
-                  <MenuItem value="">
-                    <em>None</em>
-                  </MenuItem>
-                  {filteredActors.map((actor) => (
-                    <MenuItem key={actor} value={actor}>
-                      {actor}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
 
-              {/* Infinite scroll for loading more actors */}
-              {filteredActors.length < totalActors && hasMore && (
+              {/* Combined search and selection field */}
+              <Autocomplete
+                id="actor-autocomplete"
+                options={actors}
+                value={selectedActor}
+                onChange={handleActorChange}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Search & Select Actor"
+                    variant="outlined"
+                    fullWidth
+                  />
+                )}
+                loading={loading}
+                loadingText="Loading actors..."
+                noOptionsText="No actors found"
+                fullWidth
+              />
+
+              {/* Load more actors button for infinite scrolling */}
+              {actors.length < totalActors && hasMore && !loading && (
                 <Box textAlign="center" mt={2}>
                   <Typography
                     color="primary"
@@ -167,6 +210,34 @@ const MoviesPerActor = () => {
                   >
                     Load more actors
                   </Typography>
+                </Box>
+              )}
+
+              {loading && (
+                <Box textAlign="center" mt={2}>
+                  <CircularProgress size={24} />
+                </Box>
+              )}
+
+              {/* Actor details card */}
+              {actorDetails && (
+                <Box mt={3}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                        <Avatar
+                          src={actorDetails.profileUrl}
+                          sx={{ width: 80, height: 80, mr: 2 }}
+                          alt={actorDetails.name}
+                        />
+                        <Typography variant="h6">{actorDetails.name}</Typography>
+                      </Box>
+
+                      <Typography variant="body2" color="text.secondary">
+                        {getMovieCount()} Marvel movies
+                      </Typography>
+                    </CardContent>
+                  </Card>
                 </Box>
               )}
             </CardContent>
@@ -182,18 +253,35 @@ const MoviesPerActor = () => {
                     {selectedActor}'s Marvel Movies
                   </Typography>
 
-                  {/* Use virtualized list for better performance with large data */}
-                  {moviesPerActor[selectedActor]?.length > 0 ? (
-                    <Box height={400} sx={{ overflowX: 'hidden' }}>
-                      <List
-                        height={400}
-                        width="100%"
-                        itemCount={moviesPerActor[selectedActor].length}
-                        itemSize={50}
-                      >
-                        {renderMovieItem}
-                      </List>
-                    </Box>
+                  <Divider sx={{ mb: 2 }} />
+
+                  {movies.length > 0 ? (
+                    <List sx={{ width: '100%' }}>
+                      {movies.map((movie, index) => (
+                        <React.Fragment key={getMovieTitle(movie)}>
+                          <ListItem alignItems="flex-start">
+                            <ListItemAvatar>
+                              <Avatar
+                                variant="rounded"
+                                src={getMovieImageUrl(movie)}
+                                alt={getMovieTitle(movie)}
+                                sx={{ width: 60, height: 90, mr: 1 }}
+                              />
+                            </ListItemAvatar>
+                            <ListItemText
+                              primary={
+                                <Typography variant="subtitle1" component="div" sx={{ fontWeight: 'bold' }}>
+                                  {getMovieTitle(movie)}
+                                </Typography>
+                              }
+                            />
+                          </ListItem>
+                          {index < movies.length - 1 && (
+                            <Divider variant="inset" component="li" />
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </List>
                   ) : (
                     <Typography variant="body1" color="text.secondary">
                       No movies found for this actor.
@@ -209,13 +297,6 @@ const MoviesPerActor = () => {
           </Card>
         </Grid>
       </Grid>
-
-      {/* Loading indicator */}
-      {loading && (
-        <Box textAlign="center" mt={3}>
-          <CircularProgress size={40} />
-        </Box>
-      )}
     </Box>
   );
 };
