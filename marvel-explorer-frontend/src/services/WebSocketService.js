@@ -1,4 +1,3 @@
-// src/services/WebSocketService.js
 import { io } from 'socket.io-client';
 
 class WebSocketService {
@@ -9,7 +8,7 @@ class WebSocketService {
     this.connectionListeners = new Set();
   }
 
-  connect(serverUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001') {
+  connect(serverUrl = process.env.REACT_APP_API_URL ) {
     if (this.socket) {
       return;
     }

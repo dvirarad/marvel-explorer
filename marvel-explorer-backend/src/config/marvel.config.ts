@@ -1,16 +1,7 @@
-// src/config/marvel.config.ts
-
-/**
- * Configuration file for Marvel-related constants
- */
-
-// Base URL for TMDB images
 export const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
 
-// Poster size for movie images
 export const POSTER_SIZE = 'w500';
 
-// Profile size for actor images
 export const PROFILE_SIZE = 'w500';
 
 // List of Marvel movies to import with their TMDB IDs

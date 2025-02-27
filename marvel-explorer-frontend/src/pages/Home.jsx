@@ -1,4 +1,3 @@
-// src/pages/Home.jsx
 import React from 'react';
 import { Typography, Box, Grid, Card, CardContent, CardMedia, CardActions, Button, Container } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';

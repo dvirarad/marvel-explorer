@@ -1,4 +1,3 @@
-// src/websocket/progress.gateway.ts
 import {
   WebSocketGateway,
   WebSocketServer,

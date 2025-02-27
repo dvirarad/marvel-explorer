@@ -1,8 +1,6 @@
-// src/contexts/ApiContext.js - Updated with taskId support
 import React, { createContext, useContext } from 'react';
 import axios from 'axios';
 
-// Create the API client
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const apiClient = axios.create({
@@ -12,7 +10,6 @@ const apiClient = axios.create({
   },
 });
 
-// Add interceptors if needed
 apiClient.interceptors.request.use(
   (config) => {
     console.debug(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
@@ -124,7 +121,6 @@ export const ApiProvider = ({ children }) => {
   );
 };
 
-// Create a custom hook to use the API service
 export const useApi = () => {
   const context = useContext(ApiContext);
 
@@ -135,5 +131,4 @@ export const useApi = () => {
   return context;
 };
 
-// Export the service directly as well (for testing or special cases)
 export default ApiService;

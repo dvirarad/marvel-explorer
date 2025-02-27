@@ -1,4 +1,3 @@
-// src/pages/MoviesPerActor.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Typography,

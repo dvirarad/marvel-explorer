@@ -1,4 +1,3 @@
-// src/utils/character-normalizer.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 
 import { CHARACTER_CLEAN_PATTERNS } from '../config/marvel.config';
