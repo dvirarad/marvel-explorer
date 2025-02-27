@@ -48,6 +48,7 @@ const AdminPanel = () => {
     details: {},
   });
   const [currentTask, setCurrentTask] = useState(null);
+  const [showProgress, setShowProgress] = useState(false);
 
   // Connect to WebSocket when component mounts
   useEffect(() => {
@@ -59,7 +60,12 @@ const AdminPanel = () => {
 
     // Listen for progress updates
     const unsubscribeProgress = webSocketService.onProgress('all', (data) => {
-      setProgress(data);
+      // Only show progress for data import, not for cleaning
+      if (data.message && data.message.toLowerCase().includes('import')) {
+        setShowProgress(true);
+        setProgress(data);
+      }
+
       if (data.status === 'completed') {
         setLoading(false);
         setSnackbar({
@@ -67,6 +73,18 @@ const AdminPanel = () => {
           message: data.message || 'Operation completed successfully',
           severity: 'success',
         });
+
+        // Reset progress after completion
+        setTimeout(() => {
+          setShowProgress(false);
+          setProgress({
+            percent: 0,
+            message: '',
+            status: null,
+            eta: 0,
+            details: {},
+          });
+        }, 3000);
       } else if (data.status === 'error') {
         setLoading(false);
         setError(data.message || 'An error occurred');
@@ -75,6 +93,7 @@ const AdminPanel = () => {
           message: data.message || 'An error occurred',
           severity: 'error',
         });
+        setShowProgress(false);
       }
     });
 
@@ -100,13 +119,18 @@ const AdminPanel = () => {
     setOpenDialog(false);
     setLoading(true);
     setError(null);
+
+    // Reset progress
     setProgress({
       percent: 0,
-      message: dialogAction === 'clean' ? 'Cleaning database...' : 'Reloading database...',
+      message: '',
       status: 'running',
       eta: 0,
       details: {},
     });
+
+    // Only show progress for reload, not for clean
+    setShowProgress(dialogAction === 'reload');
 
     // Generate a unique task ID
     const taskId = `${dialogAction}-db-${Date.now()}`;
@@ -115,10 +139,22 @@ const AdminPanel = () => {
     try {
       if (dialogAction === 'clean') {
         await apiService.cleanDatabase({ taskId });
+        // For clean operations, we don't get progress updates, so handle completion here
+        setLoading(false);
+        setSnackbar({
+          open: true,
+          message: 'Database cleaned successfully!',
+          severity: 'success',
+        });
       } else if (dialogAction === 'reload') {
         await apiService.reloadDatabase({ taskId });
+        // For reload, progress updates come via WebSocket, don't set loading to false here
+        setSnackbar({
+          open: true,
+          message: 'Database reload started. Progress will be shown below...',
+          severity: 'info',
+        });
       }
-      // Don't set loading to false here - we'll wait for WebSocket to tell us it's done
     } catch (err) {
       setLoading(false);
       setError(
@@ -129,6 +165,7 @@ const AdminPanel = () => {
         message: `Error: ${err.response?.data?.message || err.message}`,
         severity: 'error',
       });
+      setShowProgress(false);
     }
   };
 
@@ -199,7 +236,8 @@ const AdminPanel = () => {
 
         <Alert severity="info" sx={{ mb: 3 }}>
           If you don't see images for actors and movies, try reloading the database using the button below.
-          The reload process will fetch and store all image URLs from TMDB.
+          The reload process will fetch and store all image URLs from TMDB. Progress will be shown only
+          during the data import phase, not during database cleaning.
         </Alert>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 3 }}>
@@ -224,12 +262,23 @@ const AdminPanel = () => {
           </Button>
         </Box>
 
-        {loading && (
+        {loading && !showProgress && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 3 }}>
+            <CircularProgress size={24} sx={{ mr: 1 }} />
+            <Typography variant="body2" color="text.secondary">
+              {dialogAction === 'clean'
+                ? 'Cleaning database...'
+                : 'Preparing to reload database...'}
+            </Typography>
+          </Box>
+        )}
+
+        {showProgress && (
           <Card sx={{ mt: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6" color="primary">
-                  {dialogAction === 'clean' ? 'Cleaning Database' : 'Reloading Database'}
+                  Importing Marvel Data
                 </Typography>
                 {getProgressStatusChip()}
               </Box>
@@ -260,7 +309,7 @@ const AdminPanel = () => {
 
               {progress.details?.current && progress.details?.total && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Processing item {progress.details.current} of {progress.details.total}
+                  Processing movie {progress.details.current} of {progress.details.total}
                 </Typography>
               )}
             </CardContent>

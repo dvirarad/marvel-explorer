@@ -2,7 +2,7 @@
 import React from 'react';
 import { Typography, Box, Grid, Card, CardContent, CardMedia, CardActions, Button, Container } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import { MarvelHeading, MarvelGradientText, MarvelSection } from '../components/ui/MarvelTheme';
+import { MarvelGradientText, MarvelSection } from '../components/ui/MarvelTheme';
 
 const Home = () => {
   return (
@@ -41,12 +41,29 @@ const Home = () => {
               }
             }}>
               <CardMedia
-                component="img"
-                height="200"
-                image="/assets/movies-per-actor.jpg"
-                alt="Movies Per Actor"
-                sx={{ objectFit: 'cover' }}
-              />
+                component="div"
+                sx={{
+                  height: 200,
+                  bgcolor: '#E23636', // Marvel red
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  fontSize: '1.5rem',
+                  backgroundImage: 'linear-gradient(135deg, #E23636 0%, #F5F5F5 100%)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '&::after': {
+                    content: '"🎬"',
+                    position: 'absolute',
+                    fontSize: '5rem',
+                    opacity: 0.2
+                  }
+                }}
+              >
+                MOVIES PER ACTOR
+              </CardMedia>
               <CardContent sx={{ flexGrow: 1 }}>
                 <Typography variant="h5" component="h2" gutterBottom color="primary" fontWeight="bold">
                   Movies Per Actor
@@ -81,12 +98,29 @@ const Home = () => {
               }
             }}>
               <CardMedia
-                component="img"
-                height="200"
-                image="/assets/actors-multiple-characters.jpg"
-                alt="Actors with Multiple Characters"
-                sx={{ objectFit: 'cover' }}
-              />
+                component="div"
+                sx={{
+                  height: 200,
+                  bgcolor: '#518CCA', // Marvel blue
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  fontSize: '1.5rem',
+                  backgroundImage: 'linear-gradient(135deg, #518CCA 0%, #F5F5F5 100%)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '&::after': {
+                    content: '"👨‍🎤"',
+                    position: 'absolute',
+                    fontSize: '5rem',
+                    opacity: 0.2
+                  }
+                }}
+              >
+                ACTORS & CHARACTERS
+              </CardMedia>
               <CardContent sx={{ flexGrow: 1 }}>
                 <Typography variant="h5" component="h2" gutterBottom color="primary" fontWeight="bold">
                   Actors with Multiple Characters
@@ -121,12 +155,29 @@ const Home = () => {
               }
             }}>
               <CardMedia
-                component="img"
-                height="200"
-                image="/assets/characters-multiple-actors.jpg"
-                alt="Characters with Multiple Actors"
-                sx={{ objectFit: 'cover' }}
-              />
+                component="div"
+                sx={{
+                  height: 200,
+                  bgcolor: '#F78F3F', // Marvel orange
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  fontSize: '1.5rem',
+                  backgroundImage: 'linear-gradient(135deg, #F78F3F 0%, #F5F5F5 100%)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '&::after': {
+                    content: '"🦸‍♂️"',
+                    position: 'absolute',
+                    fontSize: '5rem',
+                    opacity: 0.2
+                  }
+                }}
+              >
+                CHARACTERS & ACTORS
+              </CardMedia>
               <CardContent sx={{ flexGrow: 1 }}>
                 <Typography variant="h5" component="h2" gutterBottom color="primary" fontWeight="bold">
                   Characters with Multiple Actors

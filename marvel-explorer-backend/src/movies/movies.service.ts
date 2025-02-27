@@ -1,3 +1,4 @@
+// src/movies/movies.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -71,53 +72,73 @@ export class MoviesService {
   /**
    * Get movies per actor with pagination
    * @param pagination Pagination options
-   * @returns Paginated list of movies per actor
+   * @returns Paginated list of movies per actor with movie images
    */
   async getMoviesPerActor(pagination?: PaginationQueryDto) {
     this.logger.log('Getting movies per actor');
     const { page = 0, limit = 10 } = pagination || {};
 
-    // Aggregate to get movies per actor
-    const allActorMoviesRelations = await this.macModel
-      .find()
+    // First, get all actors
+    const actors = await this.actorModel.find().sort({ name: 1 }).exec();
+
+    // Apply pagination to actors
+    const totalActors = actors.length;
+    const paginatedActors = actors.slice(page * limit, page * limit + limit);
+    const actorIds = paginatedActors.map(actor => actor._id);
+
+    // Get all movie-actor-character relations for these actors
+    const relations = await this.macModel
+      .find({ actor: { $in: actorIds } })
       .populate('movie')
       .populate('actor')
       .exec();
 
-    // Build the full dataset for all actors
-    const actorMoviesMap = {};
+    // Build the response data with image URLs
+    const result = {};
 
-    for (const relation of allActorMoviesRelations) {
+    // Initialize with empty arrays for each actor
+    paginatedActors.forEach(actor => {
+      result[actor.name] = [];
+    });
+
+    // Populate with movies and add image URLs
+    for (const relation of relations) {
       const actorName = relation.actor['name'];
-      const movieTitle = relation.movie['title'];
+      const actorImageUrl = relation.actor['profileUrl'];
+      const movie = relation.movie as MovieDocument;
 
-      if (!actorMoviesMap[actorName]) {
-        actorMoviesMap[actorName] = [];
-      }
-
-      if (!actorMoviesMap[actorName].includes(movieTitle)) {
-        actorMoviesMap[actorName].push(movieTitle);
+      if (
+        !result[actorName].some(item =>
+          typeof item === 'object' ? item.title === movie.title : item === movie.title,
+        )
+      ) {
+        // Add movie with image URL if exists, otherwise just the title
+        if (movie.posterUrl) {
+          result[actorName].push({
+            title: movie.title,
+            imageUrl: movie.posterUrl,
+          });
+        } else {
+          result[actorName].push(movie.title);
+        }
       }
     }
 
-    // Get sorted actor names for consistent ordering
-    const actorNames = Object.keys(actorMoviesMap).sort();
-
-    // Apply pagination
-    const totalActors = actorNames.length;
-    const paginatedActorNames = actorNames.slice(page * limit, page * limit + limit);
-
-    // Build the paginated response
-    const paginatedResult = {};
-    paginatedActorNames.forEach(actor => {
-      paginatedResult[actor] = actorMoviesMap[actor];
-    });
+    // Add actor image URLs
+    const responseWithImages = {};
+    for (const [actorName, movies] of Object.entries(result)) {
+      const actor = paginatedActors.find(a => a.name === actorName);
+      responseWithImages[actorName] = {
+        movies,
+        actorImageUrl: actor?.profileUrl || null,
+      };
+    }
 
     // Return with pagination metadata
     const totalPages = Math.ceil(totalActors / limit);
 
     return {
-      data: paginatedResult,
+      data: responseWithImages,
       pagination: {
         total: totalActors,
         page,
@@ -132,7 +153,7 @@ export class MoviesService {
   /**
    * Get actors with multiple characters with pagination
    * @param pagination Pagination options
-   * @returns Paginated list of actors with multiple characters
+   * @returns Paginated list of actors with multiple characters including images
    */
   async getActorsWithMultipleCharacters(pagination?: PaginationQueryDto) {
     this.logger.log('Getting actors with multiple characters');
@@ -150,10 +171,12 @@ export class MoviesService {
     const actorCharactersMap: Record<string, Map<string, any>> = {};
 
     for (const relation of relations) {
-      const actorName = relation.actor['name'];
-      const movieTitle = relation.movie['title'];
+      const actor = relation.actor as ActorDocument;
+      const movie = relation.movie as MovieDocument;
+      const actorName = actor.name;
+      const movieTitle = movie.title;
       const characterName = relation.character
-        ? relation.character['name']
+        ? (relation.character as CharacterDocument).name
         : relation.characterName;
 
       if (!actorCharactersMap[actorName]) {
@@ -165,6 +188,7 @@ export class MoviesService {
         actorCharactersMap[actorName].set(characterName, {
           movieName: movieTitle,
           characterName: characterName,
+          movieImageUrl: movie.posterUrl || null,
         });
       }
     }
@@ -174,7 +198,14 @@ export class MoviesService {
 
     for (const [actorName, charactersMap] of Object.entries(actorCharactersMap)) {
       if (charactersMap?.size > 1) {
-        actorsWithMultipleCharacters[actorName] = Array.from(charactersMap.values());
+        // Get actor image URL
+        const actor = await this.actorModel.findOne({ name: actorName }).exec();
+        const actorImageUrl = actor?.profileUrl || null;
+
+        actorsWithMultipleCharacters[actorName] = {
+          characters: Array.from(charactersMap.values()),
+          actorImageUrl,
+        };
       }
     }
 
@@ -210,7 +241,7 @@ export class MoviesService {
   /**
    * Get characters with multiple actors with pagination
    * @param pagination Pagination options
-   * @returns Paginated list of characters with multiple actors
+   * @returns Paginated list of characters with multiple actors including images
    */
   async getCharactersWithMultipleActors(pagination?: PaginationQueryDto) {
     this.logger.log('Getting characters with multiple actors');
@@ -228,10 +259,12 @@ export class MoviesService {
     const characterActorsMap: Record<string, Map<string, any>> = {};
 
     for (const relation of relations) {
-      const actorName = relation.actor['name'];
-      const movieTitle = relation.movie['title'];
+      const actor = relation.actor as ActorDocument;
+      const movie = relation.movie as MovieDocument;
+      const actorName = actor.name;
+      const movieTitle = movie.title;
       const characterName = relation.character
-        ? relation.character['name']
+        ? (relation.character as CharacterDocument).name
         : relation.characterName;
 
       if (!characterActorsMap[characterName]) {
@@ -244,6 +277,8 @@ export class MoviesService {
         characterActorsMap[characterName].set(actorKey, {
           movieName: movieTitle,
           actorName: actorName,
+          actorImageUrl: actor.profileUrl || null,
+          movieImageUrl: movie.posterUrl || null,
         });
       }
     }
@@ -260,9 +295,13 @@ export class MoviesService {
         }
       }
 
-      // If there's more than one actor (by name), include this character
       if (Object.keys(actorsByName).length > 1) {
-        charactersWithMultipleActors[characterName] = Array.from(actorsMap.values());
+        const listOfMovies = Array.from(actorsMap.values());
+        //remove duplicate actors from listOfMovies
+        const uniqueActors = listOfMovies.filter(
+          (actor, index, self) => index === self.findIndex(t => t.actorName === actor.actorName),
+        );
+        charactersWithMultipleActors[characterName] = uniqueActors;
       }
     }
 

@@ -186,17 +186,14 @@ export class DataPopulateService {
           continue;
         }
 
-        // Normalize and get canonical character name
+        // Normalize character name
         const originalName = castMember.character;
         const normalizedName = this.characterNormalizer.normalizeCharacterName(originalName);
-        const canonicalName = this.characterNormalizer.getCanonicalName(originalName);
 
-        this.logger.debug(
-          `Character: "${originalName}" -> normalized: "${normalizedName}" -> canonical: "${canonicalName}"`,
-        );
+        this.logger.debug(`Character: "${originalName}" -> normalized: "${normalizedName}"`);
 
         // Find or create character
-        const character = await this.getOrCreateCharacter(canonicalName);
+        const character = await this.getOrCreateCharacter(normalizedName);
 
         // Create relationship if it doesn't exist
         const existingRelation = await this.macModel.findOne({
@@ -223,18 +220,18 @@ export class DataPopulateService {
   }
 
   /**
-   * Get or create a character by canonical name
+   * Get or create a character by normalized name
    */
-  private async getOrCreateCharacter(canonicalName: string): Promise<CharacterDocument> {
+  private async getOrCreateCharacter(normalizedName: string): Promise<CharacterDocument> {
     // Check cache first
-    if (this.characterMap.has(canonicalName)) {
-      return this.characterMap.get(canonicalName);
+    if (this.characterMap.has(normalizedName)) {
+      return this.characterMap.get(normalizedName);
     }
 
     // Check database
     let character = await this.characterModel.findOne({
       name: new RegExp(
-        `^${this.characterNormalizer.formatCharacterNameForDisplay(canonicalName)}$`,
+        `^${this.characterNormalizer.formatCharacterNameForDisplay(normalizedName)}$`,
         'i',
       ),
     });
@@ -242,7 +239,7 @@ export class DataPopulateService {
     // Create if not found
     if (!character) {
       // Format name for display
-      const displayName = this.characterNormalizer.formatCharacterNameForDisplay(canonicalName);
+      const displayName = this.characterNormalizer.formatCharacterNameForDisplay(normalizedName);
 
       character = await this.characterModel.create({
         name: displayName,
@@ -252,101 +249,56 @@ export class DataPopulateService {
     }
 
     // Store in cache for future lookups
-    this.characterMap.set(canonicalName, character);
+    this.characterMap.set(normalizedName, character);
 
     return character;
   }
 
   /**
    * Clean the database
-   * This is now a purely sync function that returns immediately and updates progress via WebSockets
+   * This is now a purely sync function that returns immediately with no progress updates
    */
   async cleanDatabase(taskId = 'clean-database'): Promise<{ success: boolean; message: string }> {
     // Start the clean process in the background
-    this.executeCleanProcess(taskId);
+    this.executeCleanProcess();
 
     // Return immediately with an acknowledgment
-    return {
-      success: true,
-      message: 'Database clean started. Progress will be reported via WebSocket.',
-    };
+    return { success: true, message: 'Database clean started' };
   }
 
   /**
-   * Execute the actual database cleaning process asynchronously
-   * @param taskId Unique task ID for progress tracking
+   * Execute the actual database cleaning process asynchronously without progress updates
    */
-  private async executeCleanProcess(taskId: string): Promise<void> {
+  private async executeCleanProcess(): Promise<void> {
     try {
       this.logger.log('Cleaning database...');
 
-      // Send initial progress update
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 0,
-        message: 'Starting database cleanup...',
-        status: 'running',
-        eta: 10,
-      });
-
-      // Delete collections with progress updates
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 20,
-        message: 'Removing movie-actor-character relationships...',
-        status: 'running',
-        eta: 8,
-      });
+      // Delete collections without progress updates
       await this.macModel.deleteMany({});
+      this.logger.log('Removed movie-actor-character relationships');
 
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 40,
-        message: 'Removing movies...',
-        status: 'running',
-        eta: 6,
-      });
       await this.movieModel.deleteMany({});
+      this.logger.log('Removed movies');
 
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 60,
-        message: 'Removing actors...',
-        status: 'running',
-        eta: 4,
-      });
       await this.actorModel.deleteMany({});
+      this.logger.log('Removed actors');
 
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 80,
-        message: 'Removing characters...',
-        status: 'running',
-        eta: 2,
-      });
       await this.characterModel.deleteMany({});
+      this.logger.log('Removed characters');
 
       // Clear character map
       this.characterMap.clear();
 
-      // Send completion update
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 100,
-        message: 'Database cleaned successfully',
-        status: 'completed',
-        eta: 0,
-      });
-
       this.logger.log('Database cleaned successfully');
     } catch (error) {
       this.logger.error(`Error cleaning database: ${error.message}`);
-
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 0,
-        message: `Error cleaning database: ${error.message}`,
-        status: 'error',
-      });
     }
   }
 
   /**
    * Reload the database with fresh data
    * This is now a purely sync function that returns immediately and updates progress via WebSockets
+   * only during the import phase
    */
   async reloadDatabase(taskId = 'reload-database'): Promise<{ success: boolean; message: string }> {
     // Start the reload process in the background
@@ -367,35 +319,11 @@ export class DataPopulateService {
     try {
       this.logger.log('Reloading database...');
 
-      // Send initial progress update
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 0,
-        message: 'Starting database reload...',
-        status: 'running',
-        eta: Object.keys(MARVEL_MOVIES).length * 3 + 10,
-      });
+      // First clean the database without progress updates
+      await this.executeCleanProcess();
 
-      // First clean the database
-      await this.executeCleanProcess(`${taskId}-clean`);
-
-      // Update progress
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 10,
-        message: 'Database cleaned. Starting to import fresh data...',
-        status: 'running',
-        eta: Object.keys(MARVEL_MOVIES).length * 3,
-      });
-
-      // Import fresh data
-      await this.executeImportProcess(`${taskId}-import`);
-
-      // Final completion update
-      this.progressGateway?.sendProgressUpdate(taskId, {
-        percent: 100,
-        message: 'Database reloaded successfully with all images and normalized character data',
-        status: 'completed',
-        eta: 0,
-      });
+      // Then import fresh data with progress updates
+      await this.executeImportProcess(taskId);
     } catch (error) {
       this.logger.error(`Error reloading database: ${error.message}`);
 

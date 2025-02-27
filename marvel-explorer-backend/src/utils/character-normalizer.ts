@@ -1,7 +1,7 @@
 // src/utils/character-normalizer.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 
-import { CHARACTER_ALIASES, CHARACTER_CLEAN_PATTERNS } from '../config/marvel.config';
+import { CHARACTER_CLEAN_PATTERNS } from '../config/marvel.config';
 
 @Injectable()
 export class CharacterNormalizerService {
@@ -17,106 +17,133 @@ export class CharacterNormalizerService {
 
     let normalized = name.toLowerCase().trim();
 
-    // Apply all cleaning patterns
+    // Apply all cleaning patterns from config
     CHARACTER_CLEAN_PATTERNS.forEach(pattern => {
       normalized = normalized.replace(pattern, ' ');
     });
 
+    // Additional cleaning: remove "The" before nouns
+    normalized = normalized.replace(/\bthe\s+/gi, ' ');
+
     // Replace multiple spaces with a single space
     normalized = normalized.replace(/\s+/g, ' ').trim();
 
-    return normalized;
-  }
+    // Apply specific character normalization rules
 
-  /**
-   * Get the canonical form of a character name
-   * @param name Raw character name
-   * @returns Canonical character name
-   */
-  getCanonicalName(name: string): string {
-    const normalized = this.normalizeCharacterName(name);
-
-    // Check direct matches in aliases
-    if (normalized in CHARACTER_ALIASES) {
-      return normalized;
+    // Handle Human Torch / Johnny Storm patterns
+    if (normalized.includes('human torch') && normalized.includes('johnny storm')) {
+      normalized = 'johnny storm';
+    } else if (normalized.includes('human torch')) {
+      normalized = 'johnny storm';
     }
 
-    // Check if it's an alias of another character
-    for (const [canonical, aliases] of Object.entries(CHARACTER_ALIASES)) {
-      if (aliases.includes(normalized)) {
-        return canonical;
-      }
-    }
-
-    // Additional special case handling for problem characters
-
-    // Handle compound names with both character names
+    // Handle Iron Man / Tony Stark patterns
     if (normalized.includes('iron man') && normalized.includes('tony stark')) {
-      return 'tony stark';
+      normalized = 'tony stark';
+    } else if (normalized.includes('iron man')) {
+      normalized = 'tony stark';
     }
 
+    // Handle Captain America / Steve Rogers patterns
     if (
-      normalized.includes('steve rogers') &&
-      (normalized.includes('captain america') || normalized.includes('america'))
+      (normalized.includes('captain america') || normalized.includes('america')) &&
+      normalized.includes('steve rogers')
     ) {
-      return 'steve rogers';
+      normalized = 'steve rogers';
+    } else if (normalized.includes('captain america')) {
+      normalized = 'steve rogers';
     }
 
-    if (normalized.includes('peter quill') && normalized.includes('star')) {
-      return 'peter quill';
-    }
-
+    // Handle War Machine / James Rhodes patterns
     if (
-      normalized.includes('james rhodes') &&
-      (normalized.includes('war machine') || normalized.includes('machine'))
+      (normalized.includes('war machine') || normalized.includes('iron patriot')) &&
+      normalized.includes('james rhodes')
     ) {
-      return 'james rhodes';
+      normalized = 'james rhodes';
+    } else if (normalized.includes('war machine') || normalized.includes('iron patriot')) {
+      normalized = 'james rhodes';
     }
 
-    if (normalized.includes('bruce banner') && normalized.includes('hulk')) {
-      return 'bruce banner';
+    // Handle Hulk / Bruce Banner patterns
+    if (normalized.includes('hulk') && normalized.includes('bruce banner')) {
+      normalized = 'bruce banner';
+    } else if (normalized.includes('hulk')) {
+      normalized = 'bruce banner';
     }
 
+    // Handle Spider-Man / Peter Parker patterns
     if (
-      normalized.includes('carol danvers') ||
-      normalized.includes('captain marvel') ||
-      normalized.includes('vers')
+      (normalized.includes('spider') || normalized.includes('spiderman')) &&
+      normalized.includes('peter parker')
     ) {
-      return 'carol danvers';
+      normalized = 'peter parker';
+    } else if (normalized.includes('spider') || normalized.includes('spiderman')) {
+      normalized = 'peter parker';
     }
 
-    // No match found, use the normalized name
+    // Handle Star-Lord / Peter Quill patterns
+    if (
+      (normalized.includes('star') || normalized.includes('starlord')) &&
+      normalized.includes('peter quill')
+    ) {
+      normalized = 'peter quill';
+    } else if (normalized.includes('star lord') || normalized.includes('starlord')) {
+      normalized = 'peter quill';
+    }
+
+    // Handle Black Widow / Natasha patterns
+    if (
+      normalized.includes('black widow') &&
+      (normalized.includes('natasha') ||
+        normalized.includes('romanoff') ||
+        normalized.includes('romanova'))
+    ) {
+      normalized = 'natasha romanoff';
+    } else if (normalized.includes('black widow')) {
+      normalized = 'natasha romanoff';
+    } else if (normalized.includes('natalie rushman') && normalized.includes('natasha romanoff')) {
+      normalized = 'natasha romanoff';
+    } else if (normalized.includes('natalie rushman')) {
+      normalized = 'natasha romanoff';
+    }
+
+    // Handle Captain Marvel / Carol Danvers patterns
+    if (
+      (normalized.includes('captain marvel') || normalized.includes('vers')) &&
+      (normalized.includes('carol') || normalized.includes('danvers'))
+    ) {
+      normalized = 'carol danvers';
+    } else if (normalized.includes('captain marvel') || normalized.includes('vers')) {
+      normalized = 'carol danvers';
+    }
+
+    // Handle Hawkeye / Clint Barton patterns
+    if (normalized.includes('hawkeye') && normalized.includes('clint barton')) {
+      normalized = 'clint barton';
+    } else if (normalized.includes('hawkeye')) {
+      normalized = 'clint barton';
+    }
+
+    // Handle Falcon / Sam Wilson patterns - fix for "Sam Wilson Falcon" vs "Sam Wilson The Falcon"
+    if (normalized.includes('falcon') && normalized.includes('sam wilson')) {
+      normalized = 'sam wilson';
+    } else if (normalized.includes('falcon')) {
+      normalized = 'sam wilson';
+    }
+
     return normalized;
   }
 
   /**
-   * Format a canonical name for display
-   * @param canonicalName Canonical character name
+   * Format a normalized name for display
+   * @param normalizedName Normalized character name
    * @returns Formatted name for display
    */
-  formatCharacterNameForDisplay(canonicalName: string): string {
+  formatCharacterNameForDisplay(normalizedName: string): string {
     // Capitalize each word
-    return canonicalName
+    return normalizedName
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-  }
-
-  /**
-   * Check if two character names refer to the same character
-   * @param name1 First character name
-   * @param name2 Second character name
-   * @returns Whether they are the same character
-   */
-  areSameCharacter(name1: string, name2: string): boolean {
-    if (!name1 || !name2) return false;
-
-    const canonical1 = this.getCanonicalName(name1);
-    const canonical2 = this.getCanonicalName(name2);
-
-    // They have the same canonical form
-    if (canonical1 === canonical2) return true;
-
-    return false;
   }
 }

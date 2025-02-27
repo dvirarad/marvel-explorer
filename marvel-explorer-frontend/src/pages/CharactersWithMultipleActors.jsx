@@ -94,6 +94,8 @@ const CharactersWithMultipleActors = () => {
     fetchData();
   };
 
+  // No need for helper methods as URLs are directly in the response
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -235,17 +237,7 @@ const CharactersWithMultipleActors = () => {
                         />
                       </Box>
                     </Box>
-                    <CardMedia
-                      component="img"
-                      height="180"
-                      image={`/api/placeholder/600/200?text=${encodeURIComponent(character)}`}
-                      alt={character}
-                      sx={{
-                        mt: 2,
-                        borderRadius: 1,
-                        boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
-                      }}
-                    />
+
                   </Box>
 
                   <CardContent>
@@ -268,7 +260,7 @@ const CharactersWithMultipleActors = () => {
                           >
                             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                               <Avatar
-                                src={`/api/placeholder/50/50?text=${encodeURIComponent(role.actorName.split(' ')[0])}`}
+                                src={role.actorImageUrl || `/api/placeholder/50/50?text=${encodeURIComponent(role.actorName.split(' ')[0])}`}
                                 sx={{ mr: 1.5 }}
                               />
                               <Box>
@@ -285,6 +277,19 @@ const CharactersWithMultipleActors = () => {
                                 </Box>
                               </Box>
                             </Box>
+                            {role.movieImageUrl && (
+                              <Box mt={1} ml={7} width="100%">
+                                <img
+                                  src={role.movieImageUrl}
+                                  alt={role.movieName}
+                                  style={{
+                                    height: 60,
+                                    borderRadius: '4px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                  }}
+                                />
+                              </Box>
+                            )}
                           </ListItem>
                           {index < charactersData[character].length - 1 && (
                             <Divider variant="inset" component="li" />

@@ -17,7 +17,6 @@ import {
   ListItemAvatar,
   Avatar,
 } from '@mui/material';
-import InfiniteScroll from 'react-infinite-scroll-component';
 import { useApi } from '../contexts/ApiContext';
 
 const MoviesPerActor = () => {
@@ -27,7 +26,6 @@ const MoviesPerActor = () => {
   const [error, setError] = useState(null);
   const [selectedActor, setSelectedActor] = useState(null);
   const [actorDetails, setActorDetails] = useState(null);
-  const [movieImages, setMovieImages] = useState({});
 
   // Pagination state
   const [page, setPage] = useState(0);
@@ -51,7 +49,7 @@ const MoviesPerActor = () => {
 
       const response = await apiService.getMoviesPerActor(page, 20); // Load 20 actors at a time
 
-      // Check if response has pagination info
+      // Update total count and pagination info
       if (response.pagination) {
         setTotalActors(response.pagination.total);
         setHasMore(response.pagination.hasNextPage);
@@ -79,54 +77,76 @@ const MoviesPerActor = () => {
   // Handle actor selection
   const handleActorChange = (event, newValue) => {
     setSelectedActor(newValue);
+
+    // Update actor details when selected
+    if (newValue && moviesPerActor[newValue]) {
+      setActorDetails({
+        name: newValue,
+        profileUrl: moviesPerActor[newValue]?.actorImageUrl || `/api/placeholder/300/450?text=${encodeURIComponent(newValue)}`
+      });
+    } else {
+      setActorDetails(null);
+    }
   };
-
-  // When an actor is selected, get their details from the backend
-  useEffect(() => {
-    const fetchActorDetails = async () => {
-      if (selectedActor) {
-        try {
-          // For this MVP, we're using a placeholder for actor details
-          // In a complete implementation, you would add a backend endpoint to fetch actor by name
-          // with optional population of image
-          setActorDetails({
-            name: selectedActor,
-            profileUrl: `/api/placeholder/300/450?text=${encodeURIComponent(selectedActor)}`
-          });
-        } catch (err) {
-          console.error('Error fetching actor details:', err);
-        }
-      } else {
-        setActorDetails(null);
-      }
-    };
-
-    fetchActorDetails();
-  }, [selectedActor]);
-
-  // When an actor is selected, get movie images from backend
-  useEffect(() => {
-    const fetchMovieImages = async () => {
-      if (selectedActor && moviesPerActor[selectedActor]) {
-        const movies = moviesPerActor[selectedActor];
-        const newImages = { ...movieImages };
-
-        for (const movieTitle of movies) {
-          if (!newImages[movieTitle]) {
-            // Set placeholder for now
-            newImages[movieTitle] = `/api/placeholder/200/300?text=${encodeURIComponent(movieTitle)}`;
-          }
-        }
-
-        setMovieImages(newImages);
-      }
-    };
-
-    fetchMovieImages();
-  }, [selectedActor, moviesPerActor]);
 
   // Get sorted list of actors for Autocomplete
   const actors = Object.keys(moviesPerActor).sort();
+
+  // Get movie list for selected actor
+  const getMoviesForSelectedActor = () => {
+    if (!selectedActor || !moviesPerActor[selectedActor]) return [];
+
+    // Handle both old and new response formats
+    const actorData = moviesPerActor[selectedActor];
+
+    // If it's the new format with movies array
+    if (actorData.movies) {
+      return actorData.movies;
+    }
+
+    // If it's the old format (just an array of movie titles)
+    if (Array.isArray(actorData)) {
+      return actorData;
+    }
+
+    return [];
+  };
+
+  // Get movie image URL
+  const getMovieImageUrl = (movie) => {
+    // If movie is an object with imageUrl property
+    if (typeof movie === 'object' && movie.imageUrl) {
+      return movie.imageUrl;
+    }
+
+    // Otherwise use a placeholder
+    const title = typeof movie === 'object' ? movie.title : movie;
+    return `/api/placeholder/200/300?text=${encodeURIComponent(title)}`;
+  };
+
+  // Get movie title
+  const getMovieTitle = (movie) => {
+    return typeof movie === 'object' ? movie.title : movie;
+  };
+
+  // Get number of movies for selected actor
+  const getMovieCount = () => {
+    if (!selectedActor || !moviesPerActor[selectedActor]) return 0;
+
+    const actorData = moviesPerActor[selectedActor];
+
+    if (actorData.movies) {
+      return actorData.movies.length;
+    }
+
+    if (Array.isArray(actorData)) {
+      return actorData.length;
+    }
+
+    return 0;
+  };
+
+  const movies = getMoviesForSelectedActor();
 
   return (
     <Box>
@@ -215,7 +235,7 @@ const MoviesPerActor = () => {
                       </Box>
 
                       <Typography variant="body2" color="text.secondary">
-                        {moviesPerActor[selectedActor]?.length || 0} Marvel movies
+                        {getMovieCount()} Marvel movies
                       </Typography>
                     </CardContent>
                   </Card>
@@ -236,28 +256,28 @@ const MoviesPerActor = () => {
 
                   <Divider sx={{ mb: 2 }} />
 
-                  {moviesPerActor[selectedActor]?.length > 0 ? (
+                  {movies.length > 0 ? (
                     <List sx={{ width: '100%' }}>
-                      {moviesPerActor[selectedActor].map((movie, index) => (
-                        <React.Fragment key={movie}>
+                      {movies.map((movie, index) => (
+                        <React.Fragment key={getMovieTitle(movie)}>
                           <ListItem alignItems="flex-start">
                             <ListItemAvatar>
                               <Avatar
                                 variant="rounded"
-                                src={movieImages[movie] || `/api/placeholder/200/300?text=${encodeURIComponent(movie)}`}
-                                alt={movie}
+                                src={getMovieImageUrl(movie)}
+                                alt={getMovieTitle(movie)}
                                 sx={{ width: 60, height: 90, mr: 1 }}
                               />
                             </ListItemAvatar>
                             <ListItemText
                               primary={
                                 <Typography variant="subtitle1" component="div" sx={{ fontWeight: 'bold' }}>
-                                  {movie}
+                                  {getMovieTitle(movie)}
                                 </Typography>
                               }
                             />
                           </ListItem>
-                          {index < moviesPerActor[selectedActor].length - 1 && (
+                          {index < movies.length - 1 && (
                             <Divider variant="inset" component="li" />
                           )}
                         </React.Fragment>

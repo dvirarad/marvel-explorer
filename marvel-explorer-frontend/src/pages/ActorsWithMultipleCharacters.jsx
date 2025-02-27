@@ -15,13 +15,12 @@ import {
   Avatar,
   Chip,
   Button,
-  CardMedia,
   TextField,
   InputAdornment,
+  CardMedia,
 } from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
-import MovieIcon from '@mui/icons-material/Movie';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import InfiniteScroll from 'react-infinite-scroll-component';
 import { useApi } from '../contexts/ApiContext';
 
@@ -38,7 +37,7 @@ const ActorsWithMultipleCharacters = () => {
   const [initialLoad, setInitialLoad] = useState(true);
   const [totalActors, setTotalActors] = useState(0);
 
-  // Get sorted list of actors and filter by search
+  // Get sorted list of actors and filter by search query
   const actors = Object.keys(actorsData)
     .filter(name => name.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort();
@@ -84,6 +83,11 @@ const ActorsWithMultipleCharacters = () => {
     }
   };
 
+  // Handle search input
+  const handleSearchChange = (event) => {
+    setSearchQuery(event.target.value);
+  };
+
   // Handle refresh button click
   const handleRefresh = () => {
     setPage(0);
@@ -93,9 +97,20 @@ const ActorsWithMultipleCharacters = () => {
     setSearchQuery('');
   };
 
-  // Handle search input
-  const handleSearchChange = (event) => {
-    setSearchQuery(event.target.value);
+  // Get actor image URL
+  const getActorImageUrl = (actor, actorName) => {
+    if (actor && actor.actorImageUrl) {
+      return actor.actorImageUrl;
+    }
+    return `/api/placeholder/200/200?text=${encodeURIComponent(actorName.split(' ')[0])}`;
+  };
+
+  // Get movie image URL for a character
+  const getMovieImageUrl = (role) => {
+    if (role && role.movieImageUrl) {
+      return role.movieImageUrl;
+    }
+    return `/api/placeholder/100/150?text=${encodeURIComponent(role.movieName)}`;
   };
 
   return (
@@ -161,116 +176,123 @@ const ActorsWithMultipleCharacters = () => {
           No actors found who played multiple Marvel characters.
         </Alert>
       ) : (
-        <InfiniteScroll
-          dataLength={actors.length}
-          next={loadMoreActors}
-          hasMore={hasMore}
-          loader={
+        <>
+          <Grid container spacing={3}>
+            {actors.map((actor) => {
+              // Get actor data
+              const actorData = actorsData[actor];
+              const characters = actorData?.characters || [];
+              const actorImageUrl = getActorImageUrl(actorData, actor);
+
+              return (
+                <Grid item xs={12} md={6} key={actor}>
+                  <Card sx={{ height: '100%' }}>
+                    <Box sx={{
+                      p: 2,
+                      borderBottom: '1px solid rgba(0,0,0,0.08)',
+                      background: 'linear-gradient(145deg, #f5f5f5, #ffffff)'
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                        <Avatar
+                          src={actorImageUrl}
+                          sx={{
+                            width: 70,
+                            height: 70,
+                            mr: 2,
+                            border: '3px solid white',
+                            boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                          }}
+                        />
+                        <Box>
+                          <Typography variant="h5" fontWeight="bold">
+                            {actor}
+                          </Typography>
+                          <Chip
+                            label={`${characters.length} characters`}
+                            color="primary"
+                            size="small"
+                            sx={{ mt: 0.5 }}
+                          />
+                        </Box>
+                      </Box>
+                    </Box>
+
+                    <CardContent>
+                      <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+                        Characters Played:
+                      </Typography>
+
+                      <List>
+                        {characters.map((role, index) => (
+                          <React.Fragment key={`${role.movieName}-${role.characterName}`}>
+                            <ListItem
+                              sx={{
+                                p: 2,
+                                borderRadius: 1,
+                                bgcolor: index % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'flex-start',
+                              }}
+                            >
+                              <Box width="100%">
+                                <Typography variant="body1" fontWeight="bold">
+                                  {role.characterName}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                                  <Chip
+                                    label={role.movieName}
+                                    size="small"
+                                    color="secondary"
+                                    variant="outlined"
+                                  />
+                                </Box>
+                              </Box>
+                              {role.movieImageUrl && (
+                                <Box mt={1} width="100%">
+                                  <img
+                                    src={getMovieImageUrl(role)}
+                                    alt={role.movieName}
+                                    style={{
+                                      height: 80,
+                                      borderRadius: '4px',
+                                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                    }}
+                                  />
+                                </Box>
+                              )}
+                            </ListItem>
+                            {index < characters.length - 1 && <Divider component="li" />}
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              );
+            })}
+          </Grid>
+
+          {/* Load more button */}
+          {hasMore && !loading && (
+            <Box textAlign="center" mt={4} mb={2}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={loadMoreActors}
+                disabled={loading}
+              >
+                Load More Actors
+              </Button>
+            </Box>
+          )}
+
+          {loading && (
             <Box textAlign="center" py={3}>
               <CircularProgress size={40} />
             </Box>
-          }
-          endMessage={
-            <Box textAlign="center" py={3}>
-              <Typography color="textSecondary">
-                {actors.length > 0
-                  ? `Showing all ${actors.length} of ${totalActors} actors`
-                  : 'No actors found'}
-              </Typography>
-            </Box>
-          }
-        >
-          <Grid container spacing={3}>
-            {actors.map((actor) => (
-              <Grid item xs={12} md={6} key={actor}>
-                <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                  <Box sx={{ display: 'flex', p: 2, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-                    <Avatar
-                      src={`/api/placeholder/150/150?text=${encodeURIComponent(actor.split(' ')[0])}`}
-                      alt={actor}
-                      sx={{
-                        width: 80,
-                        height: 80,
-                        mr: 2,
-                        border: '2px solid',
-                        borderColor: 'primary.main'
-                      }}
-                    />
-                    <Box>
-                      <Typography variant="h6" fontWeight="bold">
-                        {actor}
-                      </Typography>
-                      <Chip
-                        label={`${actorsData[actor]?.length || 0} different characters`}
-                        color="secondary"
-                        size="small"
-                        sx={{ mt: 1 }}
-                      />
-                    </Box>
-                  </Box>
-
-                  <CardContent sx={{ flexGrow: 1, pt: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Characters Played:
-                    </Typography>
-
-                    <List>
-                      {actorsData[actor]?.map((role, index) => (
-                        <React.Fragment key={`${role.movieName}-${role.characterName}`}>
-                          <ListItem
-                            sx={{
-                              p: 2,
-                              borderRadius: 1,
-                              bgcolor: index % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
-                            }}
-                          >
-                            <Box sx={{ width: '100%' }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <Typography variant="body1" fontWeight="bold" color="primary">
-                                  {role.characterName}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                                <MovieIcon color="action" fontSize="small" sx={{ mr: 1 }} />
-                                <Typography variant="body2" color="text.secondary">
-                                  {role.movieName}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ mt: 2 }}>
-                                <CardMedia
-                                  component="img"
-                                  height="140"
-                                  image={`/api/placeholder/300/150?text=${encodeURIComponent(role.movieName)}`}
-                                  alt={role.movieName}
-                                  sx={{
-                                    borderRadius: 1,
-                                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                                    objectFit: 'cover',
-                                    objectPosition: 'center',
-                                  }}
-                                />
-                              </Box>
-                            </Box>
-                          </ListItem>
-                          {index < actorsData[actor].length - 1 && <Divider component="li" />}
-                        </React.Fragment>
-                      ))}
-                    </List>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </InfiniteScroll>
-      )}
-
-      {/* Load more button (when not using infinite scroll) */}
-      {hasMore && !loading && (
-        <Box textAlign="center" mt={3}>
-          <Button onClick={loadMoreActors} variant="outlined" color="primary">
-            Load More Actors
-          </Button>
-        </Box>
+          )}
+        </>
       )}
     </Box>
   );

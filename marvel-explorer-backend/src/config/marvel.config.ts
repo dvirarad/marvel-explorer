@@ -1,7 +1,7 @@
 // src/config/marvel.config.ts
 
 /**
- * Configuration file for Marvel-related constants and mappings
+ * Configuration file for Marvel-related constants
  */
 
 // Base URL for TMDB images
@@ -70,81 +70,6 @@ export const RELEVANT_ACTORS = [
 ];
 
 /**
- * Character alias mappings to handle variations of the same character
- * Format: 'canonical name': ['alias1', 'alias2', ...]
- */
-export const CHARACTER_ALIASES = {
-  // Iron Man
-  'tony stark': ['iron man'],
-
-  // Captain America
-  'steve rogers': ['captain america'],
-
-  // Thor
-  thor: ['thor odinson'],
-
-  // Hulk
-  'bruce banner': ['hulk'],
-
-  // Black Widow
-  'natasha romanoff': ['black widow', 'natasha romanov', 'natalie rushman'],
-
-  // Hawkeye
-  'clint barton': ['hawkeye'],
-
-  // War Machine
-  'james rhodes': ['war machine', 'rhodey', 'iron patriot'],
-
-  // Falcon
-  'sam wilson': ['falcon'],
-
-  // Winter Soldier
-  'bucky barnes': ['winter soldier'],
-
-  // Star-Lord
-  'peter quill': ['star-lord'],
-
-  // Captain Marvel
-  'carol danvers': ['captain marvel', 'vers'],
-
-  // Human Torch
-  'johnny storm': ['human torch'],
-
-  // Nick Fury
-  'nick fury': [],
-
-  // Pepper Potts
-  'pepper potts': [],
-
-  // Rocket
-  rocket: ['rocket raccoon'],
-
-  // Drax
-  drax: ['drax the destroyer'],
-
-  // Thanos
-  thanos: [],
-
-  // Nebula
-  nebula: [],
-
-  // Loki
-  loki: [],
-
-  // Spider-Man
-  'peter parker': ['spider-man'],
-
-  // Ant-Man
-  'scott lang': ['ant-man'],
-
-  // Black Panther
-  "t'challa": ['black panther'],
-
-  // Doctor Strange
-  'stephen strange': ['doctor strange', 'dr. strange'],
-};
-
-/**
  * Patterns to clean from character names during normalization
  */
 export const CHARACTER_CLEAN_PATTERNS = [
@@ -154,10 +79,8 @@ export const CHARACTER_CLEAN_PATTERNS = [
   /lieutenant|lt\.\s*/gi, // Military ranks
   /colonel|col\.\s*/gi,
   /sergeant|sgt\.\s*/gi,
-  /captain\s+/gi, // Only remove "captain" when it's followed by a space (preserve names like "captain america")
-  /agent\s+/gi,
-  /dr\.|doctor\s+/gi,
-  /professor|prof\./gi,
-  /the\s+/gi, // "The "
+  /agent\s+/gi, // Agent title
+  /dr\.|doctor\s+/gi, // Doctor titles
+  /professor|prof\./gi, // Professor titles
   /'[^']*'/g, // Nicknames in quotes
 ];
