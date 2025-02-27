@@ -1,11 +1,9 @@
-// src/app.module.ts
 import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { TmdbModule } from './tmdb/tmdb.module';
 import { MoviesModule } from './movies/movies.module';
-import { CharactersModule } from './characters/characters.module';
 import { DatabaseModule } from './database/database.module';
 import { DatabaseManagementModule } from './database/database-management.module';
 import { WebSocketModule } from './websocket/websocket.module';
@@ -67,7 +65,6 @@ import { WebSocketModule } from './websocket/websocket.module';
     DatabaseModule,
     TmdbModule,
     MoviesModule,
-    CharactersModule,
     DatabaseManagementModule,
   ],
 })
