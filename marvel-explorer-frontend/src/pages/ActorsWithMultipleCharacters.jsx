@@ -15,8 +15,13 @@ import {
   Avatar,
   Chip,
   Button,
+  CardMedia,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import SearchIcon from '@mui/icons-material/Search';
+import MovieIcon from '@mui/icons-material/Movie';
 import InfiniteScroll from 'react-infinite-scroll-component';
 import { useApi } from '../contexts/ApiContext';
 
@@ -25,6 +30,7 @@ const ActorsWithMultipleCharacters = () => {
   const [actorsData, setActorsData] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Pagination state
   const [page, setPage] = useState(0);
@@ -32,8 +38,10 @@ const ActorsWithMultipleCharacters = () => {
   const [initialLoad, setInitialLoad] = useState(true);
   const [totalActors, setTotalActors] = useState(0);
 
-  // Get sorted list of actors
-  const actors = Object.keys(actorsData).sort();
+  // Get sorted list of actors and filter by search
+  const actors = Object.keys(actorsData)
+    .filter(name => name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort();
 
   // Initial data load
   useEffect(() => {
@@ -82,12 +90,35 @@ const ActorsWithMultipleCharacters = () => {
     setActorsData({});
     setHasMore(true);
     setInitialLoad(true);
+    setSearchQuery('');
+  };
+
+  // Handle search input
+  const handleSearchChange = (event) => {
+    setSearchQuery(event.target.value);
   };
 
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h4" component="h1">
+        <Typography
+          variant="h4"
+          component="h1"
+          color="primary"
+          sx={{
+            position: 'relative',
+            '&:after': {
+              content: '""',
+              position: 'absolute',
+              bottom: '-8px',
+              left: '0',
+              width: '60px',
+              height: '4px',
+              bgcolor: 'primary.main',
+              borderRadius: '2px'
+            }
+          }}
+        >
           Actors with Multiple Marvel Characters
         </Typography>
         <Button
@@ -98,6 +129,24 @@ const ActorsWithMultipleCharacters = () => {
         >
           Refresh
         </Button>
+      </Box>
+
+      {/* Search box */}
+      <Box mb={3} mt={3}>
+        <TextField
+          fullWidth
+          placeholder="Search Actors"
+          variant="outlined"
+          value={searchQuery}
+          onChange={handleSearchChange}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+        />
       </Box>
 
       {error && (
@@ -134,47 +183,76 @@ const ActorsWithMultipleCharacters = () => {
           <Grid container spacing={3}>
             {actors.map((actor) => (
               <Grid item xs={12} md={6} key={actor}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Avatar
-                        sx={{
-                          bgcolor: 'primary.main',
-                          width: 56,
-                          height: 56,
-                          mr: 2,
-                        }}
-                      >
-                        {actor.split(' ').map(n => n[0]).join('')}
-                      </Avatar>
-                      <Typography variant="h6">{actor}</Typography>
+                <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <Box sx={{ display: 'flex', p: 2, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                    <Avatar
+                      src={`/api/placeholder/150/150?text=${encodeURIComponent(actor.split(' ')[0])}`}
+                      alt={actor}
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        mr: 2,
+                        border: '2px solid',
+                        borderColor: 'primary.main'
+                      }}
+                    />
+                    <Box>
+                      <Typography variant="h6" fontWeight="bold">
+                        {actor}
+                      </Typography>
+                      <Chip
+                        label={`${actorsData[actor]?.length || 0} different characters`}
+                        color="secondary"
+                        size="small"
+                        sx={{ mt: 1 }}
+                      />
                     </Box>
+                  </Box>
 
-                    <Divider sx={{ mb: 2 }} />
-
-                    <Typography variant="subtitle1" gutterBottom>
+                  <CardContent sx={{ flexGrow: 1, pt: 2 }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
                       Characters Played:
                     </Typography>
 
                     <List>
                       {actorsData[actor]?.map((role, index) => (
                         <React.Fragment key={`${role.movieName}-${role.characterName}`}>
-                          <ListItem>
-                            <ListItemText
-                              primary={role.characterName}
-                              secondary={
-                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                                  <Chip
-                                    label={role.movieName}
-                                    size="small"
-                                    color="secondary"
-                                    variant="outlined"
-                                  />
-                                </Box>
-                              }
-                            />
+                          <ListItem
+                            sx={{
+                              p: 2,
+                              borderRadius: 1,
+                              bgcolor: index % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'transparent',
+                            }}
+                          >
+                            <Box sx={{ width: '100%' }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <Typography variant="body1" fontWeight="bold" color="primary">
+                                  {role.characterName}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                                <MovieIcon color="action" fontSize="small" sx={{ mr: 1 }} />
+                                <Typography variant="body2" color="text.secondary">
+                                  {role.movieName}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ mt: 2 }}>
+                                <CardMedia
+                                  component="img"
+                                  height="140"
+                                  image={`/api/placeholder/300/150?text=${encodeURIComponent(role.movieName)}`}
+                                  alt={role.movieName}
+                                  sx={{
+                                    borderRadius: 1,
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                    objectFit: 'cover',
+                                    objectPosition: 'center',
+                                  }}
+                                />
+                              </Box>
+                            </Box>
                           </ListItem>
-                          {index < actorsData[actor].length - 1 && <Divider variant="inset" component="li" />}
+                          {index < actorsData[actor].length - 1 && <Divider component="li" />}
                         </React.Fragment>
                       ))}
                     </List>
@@ -184,6 +262,15 @@ const ActorsWithMultipleCharacters = () => {
             ))}
           </Grid>
         </InfiniteScroll>
+      )}
+
+      {/* Load more button (when not using infinite scroll) */}
+      {hasMore && !loading && (
+        <Box textAlign="center" mt={3}>
+          <Button onClick={loadMoreActors} variant="outlined" color="primary">
+            Load More Actors
+          </Button>
+        </Box>
       )}
     </Box>
   );

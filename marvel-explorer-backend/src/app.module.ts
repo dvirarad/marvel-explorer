@@ -5,8 +5,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 import { TmdbModule } from './tmdb/tmdb.module';
 import { MoviesModule } from './movies/movies.module';
-import { ActorsModule } from './actors/actors.module';
 import { CharactersModule } from './characters/characters.module';
+import { DatabaseModule } from './database/database.module';
+import { DatabaseManagementModule } from './database/database-management.module';
+import { WebSocketModule } from './websocket/websocket.module';
 
 @Module({
   imports: [
@@ -61,10 +63,12 @@ import { CharactersModule } from './characters/characters.module';
       inject: [ConfigService],
     }),
     // Feature modules
+    WebSocketModule,
+    DatabaseModule,
     TmdbModule,
     MoviesModule,
-    ActorsModule,
     CharactersModule,
+    DatabaseManagementModule,
   ],
 })
 export class AppModule {}

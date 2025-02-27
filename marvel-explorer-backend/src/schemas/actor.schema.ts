@@ -1,3 +1,4 @@
+// src/schemas/actor.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
@@ -26,6 +27,13 @@ export class Actor {
   @ApiProperty({ example: '/5qHNjhtjMD4YWH3UP0rm4tKwxCL.jpg', description: 'Profile image path' })
   @Prop()
   profilePath: string;
+
+  @ApiProperty({
+    example: 'https://image.tmdb.org/t/p/w500/5qHNjhtjMD4YWH3UP0rm4tKwxCL.jpg',
+    description: 'Full profile image URL',
+  })
+  @Prop()
+  profileUrl: string;
 }
 
 export const ActorSchema = SchemaFactory.createForClass(Actor);

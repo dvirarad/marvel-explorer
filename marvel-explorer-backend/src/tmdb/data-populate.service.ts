@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+// src/tmdb/data-populate.service.ts
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 
@@ -9,119 +10,150 @@ import {
   MovieActorCharacter,
   MovieActorCharacterDocument,
 } from '../schemas/movie-actor-character.schema';
+import { ProgressGateway } from '../websocket/progress.gateway';
+import {
+  TMDB_IMAGE_BASE_URL,
+  POSTER_SIZE,
+  PROFILE_SIZE,
+  MARVEL_MOVIES,
+  RELEVANT_ACTORS,
+} from '../config/marvel.config';
+import { CharacterNormalizerService } from '../utils/character-normalizer';
 
 import { TmdbService } from './tmdb.service';
 
 @Injectable()
-export class DataPopulateService implements OnApplicationBootstrap {
+export class DataPopulateService {
   private readonly logger = new Logger(DataPopulateService.name);
 
-  private readonly marvelMovies = {
-    'Fantastic Four (2005)': 9738,
-    'Fantastic Four: Rise of the Silver Surfer': 1979,
-    'Iron Man': 1726,
-    'The Incredible Hulk': 1724,
-    'Iron Man 2': 10138,
-    Thor: 10195,
-    'Captain America: The First Avenger': 1771,
-    'The Avengers': 24428,
-    'Iron Man 3': 68721,
-    'Thor: The Dark World': 76338,
-    'Captain America: The Winter Soldier': 100402,
-    'Guardians of the Galaxy': 118340,
-    'Avengers: Age of Ultron': 99861,
-    'Ant-Man': 102899,
-    'Fantastic Four (2015)': 166424,
-    'Captain America: Civil War': 271110,
-    'Doctor Strange': 284052,
-    'Guardians of the Galaxy Vol. 2': 283995,
-    'Spider-Man: Homecoming': 315635,
-    'Thor: Ragnarok': 284053,
-    'Black Panther': 284054,
-    'Avengers: Infinity War': 299536,
-    'Ant-Man and the Wasp': 363088,
-    'Captain Marvel': 299537,
-    'Avengers: Endgame': 299534,
-    'Spider-Man: Far From Home': 429617,
-  };
-
-  private readonly relevantActors = [
-    'Robert Downey Jr.',
-    'Chris Evans',
-    'Mark Ruffalo',
-    'Chris Hemsworth',
-    'Scarlett Johansson',
-    'Jeremy Renner',
-    'Don Cheadle',
-    'Paul Rudd',
-    'Brie Larson',
-    'Michael B. Jordan',
-    'Karen Gillan',
-    'Danai Gurira',
-    'Josh Brolin',
-    'Gwyneth Paltrow',
-    'Bradley Cooper',
-    'Tom Holland',
-    'Zoe Saldana',
-    'Anthony Mackie',
-    'Tom Hiddleston',
-    'Chris Pratt',
-    'Samuel L. Jackson',
-    'Dave Bautista',
-  ];
+  // Map to track normalized character names to canonical character documents
+  private characterMap = new Map<string, CharacterDocument>();
 
   constructor(
     private readonly tmdbService: TmdbService,
+    private readonly progressGateway: ProgressGateway,
+    private readonly characterNormalizer: CharacterNormalizerService,
     @InjectModel(Movie.name) private movieModel: Model<MovieDocument>,
     @InjectModel(Actor.name) private actorModel: Model<ActorDocument>,
     @InjectModel(Character.name) private characterModel: Model<CharacterDocument>,
     @InjectModel(MovieActorCharacter.name) private macModel: Model<MovieActorCharacterDocument>,
   ) {}
 
-  async onApplicationBootstrap() {
-    // Check if we need to seed the database
-    const movieCount = await this.movieModel.countDocuments();
-    if (movieCount === 0) {
-      this.logger.log('Database is empty. Starting data import...');
-      await this.importData();
-    } else {
-      this.logger.log('Database already contains data. Skipping import.');
-    }
+  /**
+   * Build a full image URL from a TMDB image path
+   */
+  private getFullImageUrl(
+    path: string | null | undefined,
+    type: 'poster' | 'profile' = 'poster',
+  ): string | null {
+    if (!path) return null;
+    const size = type === 'poster' ? POSTER_SIZE : PROFILE_SIZE;
+    return `${TMDB_IMAGE_BASE_URL}${size}${path}`;
   }
 
-  async importData() {
+  /**
+   * Import all Marvel movie data
+   * This is now a purely sync function that returns immediately and updates progress via WebSockets
+   */
+  async importData(taskId = 'initial-import'): Promise<{ success: boolean; message: string }> {
+    // Start the import process in the background
+    this.executeImportProcess(taskId);
+
+    // Return immediately with an acknowledgment
+    return {
+      success: true,
+      message: 'Data import started. Progress will be reported via WebSocket.',
+    };
+  }
+
+  /**
+   * Execute the actual import process asynchronously
+   * @param taskId Unique task ID for progress tracking
+   */
+  private async executeImportProcess(taskId: string): Promise<void> {
     try {
+      // Clear character map
+      this.characterMap.clear();
+
+      // Count total movies for progress calculation
+      const totalMovies = Object.keys(MARVEL_MOVIES).length;
+      let processedMovies = 0;
+
+      // Send initial progress update
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 0,
+        message: 'Starting data import...',
+        status: 'running',
+        eta: totalMovies * 3, // Rough estimate
+      });
+
       // Import movies
-      for (const [title, id] of Object.entries(this.marvelMovies)) {
+      for (const [title, id] of Object.entries(MARVEL_MOVIES)) {
+        // Send progress update
+        const percent = Math.floor((processedMovies / totalMovies) * 100);
+        const eta = (totalMovies - processedMovies) * 3;
+
+        this.progressGateway?.sendProgressUpdate(taskId, {
+          percent,
+          message: `Importing movie: ${title}`,
+          status: 'running',
+          eta,
+          details: { current: processedMovies + 1, total: totalMovies },
+        });
+
         this.logger.log(`Importing movie: ${title}`);
         await this.importMovie(id);
 
-        // Add a small delay to respect API rate limits
+        // Increment counter
+        processedMovies++;
+
+        // Rate limiting delay
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
+      // Send completion update
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 100,
+        message: 'Data import completed successfully',
+        status: 'completed',
+        eta: 0,
+        details: { current: totalMovies, total: totalMovies },
+      });
+
       this.logger.log('Data import completed successfully');
     } catch (error) {
-      this.logger.error(
-        `Error during data import: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      this.logger.error(`Error during data import: ${error.message || 'Unknown error'}`);
+
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 0,
+        message: `Error during data import: ${error.message || 'Unknown error'}`,
+        status: 'error',
+      });
     }
   }
 
-  async importMovie(tmdbId: number) {
+  /**
+   * Import a single movie and its associated actors and characters
+   */
+  private async importMovie(tmdbId: number): Promise<Movie> {
     try {
       this.logger.log(`Importing movie ${tmdbId}`);
+
+      // Get movie data from TMDB
       const movieData = await this.tmdbService.getMovie(tmdbId);
 
-      // Create or update movie in database
+      // Create or get movie from database
       let movie = await this.movieModel.findOne({ tmdbId });
       if (!movie) {
+        const posterUrl = this.getFullImageUrl(movieData.poster_path, 'poster');
+
         movie = await this.movieModel.create({
           tmdbId: movieData.id,
           title: movieData.title,
           releaseDate: new Date(movieData.release_date),
           overview: movieData.overview,
           posterPath: movieData.poster_path,
+          posterUrl: posterUrl,
         });
       }
 
@@ -130,52 +162,248 @@ export class DataPopulateService implements OnApplicationBootstrap {
 
       // Process cast members
       for (const castMember of credits.cast) {
-        // Only process relevant actors we're interested in
-        if (this.relevantActors.includes(castMember.name)) {
-          // Create or update actor
-          let actor = await this.actorModel.findOne({ tmdbId: castMember.id });
-          if (!actor) {
-            actor = await this.actorModel.create({
-              tmdbId: castMember.id,
-              name: castMember.name,
-              profilePath: castMember.profile_path,
-            });
-          }
+        // Only process relevant actors
+        if (!RELEVANT_ACTORS.includes(castMember.name)) {
+          continue;
+        }
 
-          // Find or create character
-          let character = await this.characterModel.findOne({ name: castMember.character });
-          if (!character) {
-            character = await this.characterModel.create({
-              name: castMember.character,
-            });
-          }
+        // Create or get actor
+        let actor = await this.actorModel.findOne({ tmdbId: castMember.id });
+        if (!actor) {
+          const profileUrl = this.getFullImageUrl(castMember.profile_path, 'profile');
 
-          // Create movie-actor-character relationship if it doesn't exist
-          const existingRelation = await this.macModel.findOne({
+          actor = await this.actorModel.create({
+            tmdbId: castMember.id,
+            name: castMember.name,
+            profilePath: castMember.profile_path,
+            profileUrl: profileUrl,
+          });
+        }
+
+        // Skip if character name is empty
+        if (!castMember.character) {
+          this.logger.warn(`Skipping ${actor.name} in ${movie.title} - no character name`);
+          continue;
+        }
+
+        // Normalize and get canonical character name
+        const originalName = castMember.character;
+        const normalizedName = this.characterNormalizer.normalizeCharacterName(originalName);
+        const canonicalName = this.characterNormalizer.getCanonicalName(originalName);
+
+        this.logger.debug(
+          `Character: "${originalName}" -> normalized: "${normalizedName}" -> canonical: "${canonicalName}"`,
+        );
+
+        // Find or create character
+        const character = await this.getOrCreateCharacter(canonicalName);
+
+        // Create relationship if it doesn't exist
+        const existingRelation = await this.macModel.findOne({
+          movie: movie._id,
+          actor: actor._id,
+          character: character._id,
+        });
+
+        if (!existingRelation) {
+          await this.macModel.create({
             movie: movie._id,
             actor: actor._id,
             character: character._id,
+            characterName: originalName, // Keep original name for reference
           });
-
-          if (!existingRelation) {
-            await this.macModel.create({
-              movie: movie._id,
-              actor: actor._id,
-              character: character._id,
-              characterName: castMember.character,
-            });
-          }
         }
       }
 
       return movie;
     } catch (error) {
-      this.logger.error(
-        `Error importing movie ${tmdbId}: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-      );
+      this.logger.error(`Error importing movie ${tmdbId}: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Get or create a character by canonical name
+   */
+  private async getOrCreateCharacter(canonicalName: string): Promise<CharacterDocument> {
+    // Check cache first
+    if (this.characterMap.has(canonicalName)) {
+      return this.characterMap.get(canonicalName);
+    }
+
+    // Check database
+    let character = await this.characterModel.findOne({
+      name: new RegExp(
+        `^${this.characterNormalizer.formatCharacterNameForDisplay(canonicalName)}$`,
+        'i',
+      ),
+    });
+
+    // Create if not found
+    if (!character) {
+      // Format name for display
+      const displayName = this.characterNormalizer.formatCharacterNameForDisplay(canonicalName);
+
+      character = await this.characterModel.create({
+        name: displayName,
+      });
+
+      this.logger.debug(`Created new character: ${displayName}`);
+    }
+
+    // Store in cache for future lookups
+    this.characterMap.set(canonicalName, character);
+
+    return character;
+  }
+
+  /**
+   * Clean the database
+   * This is now a purely sync function that returns immediately and updates progress via WebSockets
+   */
+  async cleanDatabase(taskId = 'clean-database'): Promise<{ success: boolean; message: string }> {
+    // Start the clean process in the background
+    this.executeCleanProcess(taskId);
+
+    // Return immediately with an acknowledgment
+    return {
+      success: true,
+      message: 'Database clean started. Progress will be reported via WebSocket.',
+    };
+  }
+
+  /**
+   * Execute the actual database cleaning process asynchronously
+   * @param taskId Unique task ID for progress tracking
+   */
+  private async executeCleanProcess(taskId: string): Promise<void> {
+    try {
+      this.logger.log('Cleaning database...');
+
+      // Send initial progress update
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 0,
+        message: 'Starting database cleanup...',
+        status: 'running',
+        eta: 10,
+      });
+
+      // Delete collections with progress updates
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 20,
+        message: 'Removing movie-actor-character relationships...',
+        status: 'running',
+        eta: 8,
+      });
+      await this.macModel.deleteMany({});
+
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 40,
+        message: 'Removing movies...',
+        status: 'running',
+        eta: 6,
+      });
+      await this.movieModel.deleteMany({});
+
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 60,
+        message: 'Removing actors...',
+        status: 'running',
+        eta: 4,
+      });
+      await this.actorModel.deleteMany({});
+
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 80,
+        message: 'Removing characters...',
+        status: 'running',
+        eta: 2,
+      });
+      await this.characterModel.deleteMany({});
+
+      // Clear character map
+      this.characterMap.clear();
+
+      // Send completion update
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 100,
+        message: 'Database cleaned successfully',
+        status: 'completed',
+        eta: 0,
+      });
+
+      this.logger.log('Database cleaned successfully');
+    } catch (error) {
+      this.logger.error(`Error cleaning database: ${error.message}`);
+
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 0,
+        message: `Error cleaning database: ${error.message}`,
+        status: 'error',
+      });
+    }
+  }
+
+  /**
+   * Reload the database with fresh data
+   * This is now a purely sync function that returns immediately and updates progress via WebSockets
+   */
+  async reloadDatabase(taskId = 'reload-database'): Promise<{ success: boolean; message: string }> {
+    // Start the reload process in the background
+    this.executeReloadProcess(taskId);
+
+    // Return immediately with an acknowledgment
+    return {
+      success: true,
+      message: 'Database reload started. Progress will be reported via WebSocket.',
+    };
+  }
+
+  /**
+   * Execute the actual database reloading process asynchronously
+   * @param taskId Unique task ID for progress tracking
+   */
+  private async executeReloadProcess(taskId: string): Promise<void> {
+    try {
+      this.logger.log('Reloading database...');
+
+      // Send initial progress update
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 0,
+        message: 'Starting database reload...',
+        status: 'running',
+        eta: Object.keys(MARVEL_MOVIES).length * 3 + 10,
+      });
+
+      // First clean the database
+      await this.executeCleanProcess(`${taskId}-clean`);
+
+      // Update progress
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 10,
+        message: 'Database cleaned. Starting to import fresh data...',
+        status: 'running',
+        eta: Object.keys(MARVEL_MOVIES).length * 3,
+      });
+
+      // Import fresh data
+      await this.executeImportProcess(`${taskId}-import`);
+
+      // Final completion update
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 100,
+        message: 'Database reloaded successfully with all images and normalized character data',
+        status: 'completed',
+        eta: 0,
+      });
+    } catch (error) {
+      this.logger.error(`Error reloading database: ${error.message}`);
+
+      this.progressGateway?.sendProgressUpdate(taskId, {
+        percent: 0,
+        message: `Error reloading database: ${error.message}`,
+        status: 'error',
+      });
     }
   }
 }
